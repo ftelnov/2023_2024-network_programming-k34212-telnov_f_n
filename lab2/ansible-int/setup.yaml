@@ -1,0 +1,50 @@
+- name: Setup MikroTik CHR
+  hosts: mikrotik
+  gather_facts: false
+  tasks:
+    - name: Set auth pass to default value
+      community.routeros.command:
+        commands:
+          - /user set admin password="somec00lpa$$"
+      register: user_verify
+      ignore_errors: no
+    - name: Show user verify
+      ansible.builtin.debug:
+        msg: |
+          "User verify: {{ inventory_hostname }}:{{ user_verify }}"
+    - name: Configure NTP
+      community.routeros.command:
+        commands:
+          - /system ntp client set enabled=yes mode=unicast
+          # Гугловые NTP-серваки
+          - /system ntp client servers add address=216.239.35.8
+          - /system ntp client servers add address=216.239.35.4
+          - /system ntp client print
+      register: ntp_result
+      ignore_errors: no
+    - name: Configure OSPF
+      community.routeros.command:
+        commands:
+          - /ip address add address={{ router_id }} interface=lo
+          - /routing ospf instance add disabled=no name=skynet router-id={{ router_id }} redistribute=connected,static
+          - /routing ospf area add disabled=no instance=skynet name=backbone
+          - /routing ospf interface-template add area=backbone cost=100 disabled=no type=ptp interfaces={{ router_int }}
+    - name: Print OSPF topology
+      community.routeros.command:
+        commands:
+          - /routing/ospf/neighbor/print
+          - /routing/ospf/interface/print
+          - /routing/ospf/area/print
+          - /routing/ospf/instance/print
+      register: ospf_data
+    - name: Collect device cfg
+      community.routeros.command:
+        commands:
+          - /export
+      register: full_config
+    - name: Print full device configuration
+      ansible.builtin.debug:
+        var: full_config
+    - name: Print OSPF export
+      ansible.builtin.debug:
+        var: ospf_data
